@@ -34,25 +34,8 @@ Parameters:
 # ── Resources ─────────────────────────────────────────────────────────────────
 Resources:
 
-  # ── 1. GitHub OIDC Identity Provider ────────────────────────────────────────
-  # Only ONE of these should exist per AWS account.
-  # If it already exists, import it or remove this resource and hardcode the ARN.
-  GitHubOIDCProvider:
-    Type: AWS::IAM::OIDCProvider
-    Properties:
-      Url: https://token.actions.githubusercontent.com
-      ClientIdList:
-        - sts.amazonaws.com
-      # Thumbprint list — GitHub's current TLS root CA thumbprint
-      ThumbprintList:
-        - 6938fd4d98bab03faadb97b34396831e3780aea1
-      Tags:
-        - Key: Project
-          Value: spring-app-ecr-lab
-        - Key: ManagedBy
-          Value: CloudFormation
-
-  # ── 2. IAM Role trusted by GitHub OIDC ──────────────────────────────────────
+  # ── 1. IAM Role trusted by GitHub OIDC ──────────────────────────────────────
+  # Note: GitHub OIDC provider already exists in this account; referenced by ARN.
   GitHubActionsRole:
     Type: AWS::IAM::Role
     Properties:
@@ -64,7 +47,7 @@ Resources:
           - Sid: GitHubOIDCTrust
             Effect: Allow
             Principal:
-              Federated: !GetAtt GitHubOIDCProvider.Arn
+              Federated: arn:aws:iam::711387109786:oidc-provider/token.actions.githubusercontent.com
             Action: sts:AssumeRoleWithWebIdentity
             Condition:
               StringEquals:
@@ -115,29 +98,6 @@ Resources:
       # Encrypt images at rest using the AWS-managed ECR key
       EncryptionConfiguration:
         EncryptionType: AES256
-
-      # Repository policy — only the GitHub Actions role may push;
-      # any authenticated principal in this account may pull
-      RepositoryPolicyText:
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowGitHubActionsPush
-            Effect: Allow
-            Principal:
-              AWS: !GetAtt GitHubActionsRole.Arn
-            Action:
-              - ecr:BatchCheckLayerAvailability
-              - ecr:InitiateLayerUpload
-              - ecr:UploadLayerPart
-              - ecr:CompleteLayerUpload
-              - ecr:PutImage
-          - Sid: AllowAccountPull
-            Effect: Allow
-            Principal:
-              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
-            Action:
-              - ecr:GetDownloadUrlForLayer
-              - ecr:BatchGetImage
 
       # Lifecycle policy — keep only the 10 most recent images; expire untagged
       LifecyclePolicy:
@@ -198,7 +158,7 @@ Outputs:
       Name: !Sub "${AWS::StackName}-GitHubActionsRoleArn"
 
   OIDCProviderArn:
-    Description: ARN of the GitHub OIDC provider
-    Value: !GetAtt GitHubOIDCProvider.Arn
+    Description: ARN of the GitHub OIDC provider (pre-existing, not managed by this stack)
+    Value: arn:aws:iam::711387109786:oidc-provider/token.actions.githubusercontent.com
     Export:
       Name: !Sub "${AWS::StackName}-OIDCProviderArn"

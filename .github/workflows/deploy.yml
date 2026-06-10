@@ -13,7 +13,7 @@ permissions:
   contents: read   # checkout the repository
 
 env:
-  AWS_REGION: us-central-1
+  AWS_REGION: eu-central-1
   ECR_REPOSITORY: spring-app
   IMAGE_TAG: alphonse-shema_spring-app  # rubric format: yourfullname_appname (no spaces)
 
