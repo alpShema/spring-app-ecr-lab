@@ -1,0 +1,4 @@
+template-file-path: ecr-oidc-stack.yml
+tags:
+  - deployment
+  - yaml
