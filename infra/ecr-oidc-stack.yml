@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Provisions the GitHub OIDC provider, a least-privilege IAM role for GitHub
+  Actions, and a private ECR repository with image scanning and a lifecycle
+  policy — all required for the spring-app ECR lab.
+
+# ── Parameters ────────────────────────────────────────────────────────────────
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: GitHub username or organisation that owns the repository
+    Default: YOUR_GITHUB_USERNAME
+
+  GitHubRepo:
+    Type: String
+    Description: Repository name (without the owner prefix)
+    Default: spring-app-ecr-lab
+
+  GitHubBranch:
+    Type: String
+    Description: Branch the workflow runs on
+    Default: main
+
+  ECRRepositoryName:
+    Type: String
+    Description: Name for the private ECR repository
+    Default: spring-app
+
+  IAMRoleName:
+    Type: String
+    Description: Name for the IAM role assumed by GitHub Actions
+    Default: github-ecr-push-role
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── 1. GitHub OIDC Identity Provider ────────────────────────────────────────
+  # Only ONE of these should exist per AWS account.
+  # If it already exists, import it or remove this resource and hardcode the ARN.
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # Thumbprint list — GitHub's current TLS root CA thumbprint
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+      Tags:
+        - Key: Project
+          Value: spring-app-ecr-lab
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ── 2. IAM Role trusted by GitHub OIDC ──────────────────────────────────────
+  GitHubActionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref IAMRoleName
+      Description: Assumed by GitHub Actions via OIDC to push images to ECR
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: GitHubOIDCTrust
+            Effect: Allow
+            Principal:
+              Federated: !GetAtt GitHubOIDCProvider.Arn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub
+                  - "repo:${Org}/${Repo}:ref:refs/heads/${Branch}"
+                  - Org: !Ref GitHubOrg
+                    Repo: !Ref GitHubRepo
+                    Branch: !Ref GitHubBranch
+      # Inline least-privilege policy — only the five actions needed to push
+      Policies:
+        - PolicyName: ecr-push-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ECRAuthToken
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Sid: ECRPushImage
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                Resource: !GetAtt ECRRepository.Arn
+      Tags:
+        - Key: Project
+          Value: spring-app-ecr-lab
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ── 3. Private ECR Repository ────────────────────────────────────────────────
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRRepositoryName
+
+      # Enable push-based image scanning on every push
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+      # MUTABLE allows re-pushing the same tag on each workflow run
+      ImageTagMutability: MUTABLE
+
+      # Encrypt images at rest using the AWS-managed ECR key
+      EncryptionConfiguration:
+        EncryptionType: AES256
+
+      # Repository policy — only the GitHub Actions role may push;
+      # any authenticated principal in this account may pull
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowGitHubActionsPush
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt GitHubActionsRole.Arn
+            Action:
+              - ecr:BatchCheckLayerAvailability
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:PutImage
+          - Sid: AllowAccountPull
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+
+      # Lifecycle policy — keep only the 10 most recent images; expire untagged
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images after 1 day",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 1
+                },
+                "action": { "type": "expire" }
+              },
+              {
+                "rulePriority": 2,
+                "description": "Keep only the 10 most recent tagged images",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["alphonse-shema"],
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+      Tags:
+        - Key: Project
+          Value: spring-app-ecr-lab
+        - Key: Owner
+          Value: alphonse-shema
+        - Key: ManagedBy
+          Value: CloudFormation
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+Outputs:
+  ECRRepositoryUri:
+    Description: Full URI of the ECR repository
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ECRRepositoryUri"
+
+  ECRRepositoryArn:
+    Description: ARN of the ECR repository
+    Value: !GetAtt ECRRepository.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ECRRepositoryArn"
+
+  GitHubActionsRoleArn:
+    Description: ARN of the IAM role — paste this into the workflow role-to-assume field
+    Value: !GetAtt GitHubActionsRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-GitHubActionsRoleArn"
+
+  OIDCProviderArn:
+    Description: ARN of the GitHub OIDC provider
+    Value: !GetAtt GitHubOIDCProvider.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-OIDCProviderArn"

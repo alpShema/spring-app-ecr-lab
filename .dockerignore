@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Build output — the multi-stage build handles this inside Docker
+target/
+
+# IDE and editor files
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment and secrets — never bake these into an image
+.env
+.env.*
+
+# Documentation
+*.md
+LICENSE
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+
+# CI config — not needed inside the container
+.github/

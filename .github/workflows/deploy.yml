@@ -1,0 +1,58 @@
+name: Build and Push to Amazon ECR
+
+# Triggers on every push to the repository
+on:
+  push:
+    branches:
+      - main
+
+# REQUIRED for OIDC — allows GitHub to mint a JWT token for AWS authentication
+# No AWS secrets stored in GitHub at all
+permissions:
+  id-token: write  # request OIDC JWT token
+  contents: read   # checkout the repository
+
+env:
+  AWS_REGION: us-central-1
+  ECR_REPOSITORY: spring-app
+  IMAGE_TAG: alphonse-shema_spring-app  # rubric format: yourfullname_appname (no spaces)
+
+jobs:
+  build-and-push:
+    name: Build and push Docker image to ECR
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── Step 1: Checkout source code ──────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Step 2: Authenticate to AWS using OIDC (no secrets stored in GitHub)
+      # IAM_ROLE_ARN is a GitHub repository secret set to the CloudFormation
+      # output GitHubActionsRoleArn from the infra/ecr-oidc-stack.yml stack.
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.IAM_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Step 3: Authenticate Docker to the ECR registry ───────────────────
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Step 4: Build, tag, and push the Docker image ─────────────────────
+      - name: Build, tag, and push image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # ── Step 5: Print the full image URI to the workflow log ───────────────
+      - name: Print pushed image URI
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          echo "Successfully pushed:"
+          echo "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
