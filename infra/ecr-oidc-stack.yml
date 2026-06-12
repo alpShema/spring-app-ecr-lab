@@ -34,7 +34,7 @@ Parameters:
 # ── Resources ─────────────────────────────────────────────────────────────────
 Resources:
 
-  # ── 1. IAM Role trusted by GitHub OIDC ──────────────────────────────────────
+  # ── 1. IAM Role trusted by GitHub OIDC ─────────────────────────────────────
   # Note: GitHub OIDC provider already exists in this account; referenced by ARN.
   GitHubActionsRole:
     Type: AWS::IAM::Role

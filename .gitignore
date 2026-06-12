@@ -36,3 +36,4 @@ iam/
 
 # Spring Boot devtools restart file
 .spring-boot-devtools.properties
+docs/  
