@@ -1,4 +1,8 @@
-template-file-path: ecr-oidc-stack.yml
-tags:
-  - deployment
-  - yaml
+template-file-path: infra/ecr-oidc-stack.yml
+parameters:
+  IAMRoleName: github-ecr-push-role
+  ECRRepositoryName: spring-app
+  GitHubOrg: alpShema
+  GitHubBranch: main
+  GitHubRepo: spring-app-ecr-lab
+tags: {}
