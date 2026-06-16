@@ -47,7 +47,7 @@ Resources:
           - Sid: GitHubOIDCTrust
             Effect: Allow
             Principal:
-              Federated: arn:aws:iam::711387109786:oidc-provider/token.actions.githubusercontent.com
+              Federated: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
             Action: sts:AssumeRoleWithWebIdentity
             Condition:
               StringEquals:
@@ -159,6 +159,6 @@ Outputs:
 
   OIDCProviderArn:
     Description: ARN of the GitHub OIDC provider (pre-existing, not managed by this stack)
-    Value: arn:aws:iam::711387109786:oidc-provider/token.actions.githubusercontent.com
+    Value: !Sub "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
     Export:
       Name: !Sub "${AWS::StackName}-OIDCProviderArn"
