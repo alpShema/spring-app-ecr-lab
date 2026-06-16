@@ -15,7 +15,7 @@ public class Application {
 
     @GetMapping("/")
     public String index() {
-        return "this is from from Alphonse Shema's Spring Boot app!";
+        return "hello world! This is from Alphonse Shema's Spring Boot app!";
     }
 
     @GetMapping("/health")
