@@ -1,5 +1,4 @@
 template-file-path: infra/ecr-oidc-stack.yml
-sync-type: CFN_STACK_SYNC
 parameters:
   IAMRoleName: github-ecr-push-role
   ECRRepositoryName: spring-app
